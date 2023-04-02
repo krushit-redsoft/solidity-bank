@@ -1,26 +1,152 @@
-html,
-body {
-  padding: 0;
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+input:focus {
+  border-color: #6366f1;
+}
+
+button:focus {
+  outline: none;
+}
+
+/* Card design */
+form {
+  position: relative;
+  margin: 0 auto;
+  max-width: 480px;
+}
+
+form:before,
+form:after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 100%;
+  background: linear-gradient(
+    to bottom right,
+    rgba(51, 51, 255, 0.5),
+    rgba(102, 126, 234, 0.5)
+  );
+  z-index: -1;
+  transform: skew(-20deg);
+}
+
+form:after {
+  transform: skew(20deg);
+}
+
+.form-content {
+  position: relative;
+  padding: 1.5rem;
+  background-color: white;
+  border-radius: 0.5rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  z-index: 1;
+}
+
+.form-content:before,
+.form-content:after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  width: 60%;
+  height: 100%;
+  background-color: rgba(255, 255, 255, 0.4);
+  z-index: -1;
+}
+
+.form-content:before {
+  left: -25%;
+  transform: translateY(-50%) rotate(-45deg);
+}
+
+.form-content:after {
+  right: -25%;
+  transform: translateY(-50%) rotate(45deg);
+}
+
+.form-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 2rem;
+}
+
+.form-header h2 {
+  font-size: 2rem;
+  font-weight: 600;
+  color: #6366f1;
   margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Oxygen,
-    Ubuntu, Cantarell, Fira Sans, Droid Sans, Helvetica Neue, sans-serif;
 }
 
-a {
-  color: inherit;
+.form-header img {
+  max-width: 60px;
+}
+
+.form-group {
+  margin-bottom: 1.5rem;
+}
+
+.form-group label {
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #4b5563;
+  margin-bottom: 0.5rem;
+}
+
+.form-group input {
+  border: none;
+  border-bottom: 2px solid #e5e7eb;
+  padding: 0.25rem 0;
+  font-size: 1.125rem;
+  font-weight: 500;
+  color: #1f2937;
+  width: 100%;
+  background-color: transparent;
+  transition: border-color 0.2s ease-in-out;
+}
+
+.form-group input:focus {
+  border-color: #6366f1;
+}
+
+.form-group input::placeholder {
+  color: #9ca3af;
+}
+
+.form-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 2rem;
+}
+
+.form-footer button {
+  padding: 0.75rem 1.5rem;
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: white;
+  background-color: #6366f1;
+  border-radius: 0.25rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  transition: background-color 0.2s ease-in-out;
+}
+
+.form-footer button:hover {
+  background-color: #4f46e5;
+}
+
+.form-footer a {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #6b7280;
   text-decoration: none;
+  transition: color 0.2s ease-in-out;
 }
 
-* {
-  box-sizing: border-box;
-}
-
-@media (prefers-color-scheme: dark) {
-  html {
-    color-scheme: dark;
-  }
-  body {
-    color: white;
-    background: black;
-  }
+.form-footer a:hover {
+  color: #4b5563;
 }
