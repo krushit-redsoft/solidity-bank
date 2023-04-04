@@ -1,10 +1,10 @@
 import { contractAddresses, abi } from "../constants"
 // dont export from moralis when using react
 import { useMoralis, useWeb3Contract } from "react-moralis"
-import { useEffect, useState } from "react"
+import { useEffect, useState, useMemo, useCallback } from "react"
 import { useNotification } from "web3uikit"
 import { ethers } from "ethers";
-
+import { useForm } from 'react-hook-form';
 import Fund from "./Fund";
 import Transfer from "./Transfer";
 import Withdraw from "./Withdraw";
@@ -19,85 +19,80 @@ export default function Bank() {
   // const address = await signer.getAddress();
 
   // State hooks
-  // https://stackoverflow.com/questions/58252454/react-hooks-using-usestate-vs-just-variables
   const [account, setAccount] = useState({
-    firstName: "krushit",
-    lastName: "dudhat",
-    age: "22",
-    balance: "0.00001",
+    firstName: "",
+    lastName: "",
+    age: "",
+    balance: "0.1",
   });
-  const [hasAccount, setHasAccount] = useState(true);
+  const [hasAccount, setHasAccount] = useState(false);
   const [entranceFee, setEntranceFee] = useState("0");
   const [numberOfPlayers, setNumberOfPlayers] = useState("0")
   const [recentWinner, setRecentWinner] = useState("0")
   const [wallet, setWallet] = useState('');
   const [activeTab, setActiveTab] = useState("withdraw");
 
+  const { register, handleSubmit, errors } = useForm({ mode: 'onBlur', reValidateMode: 'onChange' });
+
   const dispatch = useNotification()
 
-  const {
-    runContractFunction: createAccount,
-    data: enterTxResponse,
-    isLoading,
-    isFetching,
-  } = useWeb3Contract({
-    abi: abi,
-    contractAddress: bankAddress,
-    functionName: "createAccount",
-    msgValue: entranceFee,
-    params: account,
-  })
+  // const {
+  //   runContractFunction: createAccount,
+  //   data: enterTxResponse,
+  //   isLoading,
+  //   isFetching,
+  // } = useWeb3Contract({
+  //   abi: abi,
+  //   contractAddress: bankAddress,
+  //   functionName: "createAccount",
+  //   msgValue: entranceFee,
+  //   params: account,
+  // })
+
+  const provider = useMemo(() => new ethers.providers.Web3Provider(window.ethereum), []);
+  const signer = useMemo(() => provider.getSigner(), [provider]);
+  const contract = useMemo(() => new ethers.Contract(bankAddress, abi, signer), [bankAddress, signer]);
 
   /* View Functions */
-
-  const accountCall = async () => {
-    // using ethers call accounts function to fetch account details
-    const provider = new ethers.providers.Web3Provider(window.ethereum);
-    const signer = provider.getSigner();
-    const contract = new ethers.Contract(bankAddress, abi, signer);
-    if (wallet) {
-      const account = await contract.accounts(wallet);
-      console.log(account);
-      setAccount(account);
+  const accountCall = useCallback(async () => {
+    if (hasAccount) {
+      try {
+        const provider = new ethers.providers.Web3Provider(window.ethereum);
+        const signer = provider.getSigner();
+        const contract = new ethers.Contract(bankAddress, abi, signer);
+        const account = await contract.getPersonalInfo();
+        console.log("account", account);
+        setAccount({
+          firstName: account[0],
+          lastName: account[1],
+          age: parseInt(account[2].toString(), 10),
+          balance: ethers.utils.formatEther(account[3]),
+        });
+      } catch (error) {
+        console.log(error);
+      }
     }
-  }
-  const accountExistsCall = async () => {
-    // using ethers call accounts function to fetch account details
+  }, [hasAccount, bankAddress]);
+
+  const accountExistsCall = useCallback(async (walletParam) => {
     const provider = new ethers.providers.Web3Provider(window.ethereum);
     const signer = provider.getSigner();
     const contract = new ethers.Contract(bankAddress, abi, signer);
-    if (wallet) {
-      const accountExists = await contract.accountExists(wallet);
-      console.log(accountExists);
+    const checkWallet = walletParam || wallet;
+    if (checkWallet) {
+      const accountExists = await contract.userExists(checkWallet);
+      console.log("accountExists", accountExists);
       setHasAccount(accountExists);
       accountCall();
     }
-  }
-
-
-  async function updateUIValues() {
-    // Another way we could make a contract call:
-    // const options = { abi, contractAddress: raffleAddress }
-    // const fee = await Moralis.executeFunction({
-    //     functionName: "getEntranceFee",
-    //     ...options,
-    // })
-    // const accountFromCall = await getAccount()
-    // const accountExistsFromCall = await accountExists();
-    // const accountFromCall = await accounts();
-    // console.log(accountFromCall);
-    // console.log(accountExistsFromCall);
-    // setHasAccount(accountExistsFromCall);
-    // setAccount(accountFromCall);
-  }
+  }, [wallet, accountCall, bankAddress]);
 
   useEffect(() => {
     if (isWeb3Enabled) {
       accountExistsCall();
       accountCall();
-      // updateUIValues()
     }
-  }, [isWeb3Enabled, hasAccount])
+  }, [isWeb3Enabled, accountExistsCall, accountCall]);
   // no list means it'll update everytime anything changes or happens
   // empty list means it'll run once after the initial rendering
   // and dependencies mean it'll run whenever those things in the list change
@@ -110,30 +105,41 @@ export default function Bank() {
   //         utils.id("RaffleEnter(address)"),
   //     ],
   // }
-  
+
 
   useEffect(() => {
     async function connect() {
-      // Connect to Ethereum using the Metamask provider
-      console.log(window.ethereum.selectedAddress);
-      const provider = new ethers.providers.Web3Provider(window.ethereum);
+      try {
+        // Connect to Ethereum using the Metamask provider
+        const provider = new ethers.providers.Web3Provider(window.ethereum);
 
-      // Get the user's Ethereum address
-      const signer = provider.getSigner();
-      const wallet = await signer.getAddress();
-      setWallet(wallet);
+        // Get the user's Ethereum address
+        const signer = provider.getSigner();
+        const wallet = await signer.getAddress();
+        setWallet(wallet);
+
+        // Check if the user has an account
+        const accountExists = await contract.userExists(wallet);
+        setHasAccount(accountExists);
+        console.log('account exists ,', accountExists);
+        if (accountExists) {
+          await accountCall();
+        }
+      } catch (error) {
+        console.log(error);
+      }
     }
     connect();
-  }, []);
+  }, [contract, accountCall]);
 
   const handleTabClick = (tab) => {
     setActiveTab(tab);
   };
 
-  const handleNewNotification = () => {
+  const handleNewNotification = (message, error = false) => {
     dispatch({
-      type: "info",
-      message: "Transaction Complete!",
+      type: error || "info",
+      message: message || "Transaction Complete!",
       title: "Transaction Notification",
       position: "topR",
       icon: "bell",
@@ -143,44 +149,78 @@ export default function Bank() {
   const handleSuccess = async (tx) => {
     try {
       await tx.wait(1)
-      updateUIValues()
-      handleNewNotification(tx)
+      console.log(tx);
+      handleNewNotification()
     } catch (error) {
       console.log(error)
     }
   }
 
-  const handleSubmit = async (e) => {
-    e.preventDefault()
-    console.log(e);
+  const onSubmit = async (data) => {
+    console.log(data);
+
+    const value = ethers.utils.parseEther(data.balance);
+    console.log(value);
+    try {
+      const tx = await contract.storePersonalInfo(data.firstName, data.lastName, data.age, { value });
+      console.log(tx);
+      handleSuccess(tx);
+    } catch (error) {
+      handleNewNotification(error.message, true);
+    }
   }
 
+  const handleFundAccount = async (data) => {
+    console.log(data);
+    const value = ethers.utils.parseEther(data.amount);
+    console.log(value);
+    try {
+      const tx = await contract.deposit({ value });
+      console.log(tx);
+      handleSuccess(tx);
+    } catch (error) {
+      handleNewNotification(error.message, true);
+    }
+  }
+
+  const handleWithdraw = async (data) => {
+    console.log(data);
+    const value = ethers.utils.parseEther(data.amount);
+    console.log(value);
+    try {
+      const tx = await contract.withdraw(value);
+      console.log(tx);
+      handleSuccess(tx);
+    } catch (error) {
+      handleNewNotification(error.message, true);
+    }
+  }
+
+  const handleTransfer = async (data) => {
+    console.log(data);
+    const value = ethers.utils.parseEther(data.amount);
+    console.log(value);
+    try {
+      const tx = await contract.transfer(data.recipient, value);
+      console.log(tx);
+      handleSuccess(tx);
+    } catch (error) {
+      handleNewNotification(error.message, true);
+    }
+  }
+
+
   return (
-    <div className="p-5">
+    <div className="p-5 w-1/2">
       {hasAccount ? (
-        <>
-          {/* card for user detial */}
-          {/* <div class="max-w-md mx-auto bg-white rounded-xl shadow-md overflow-hidden md:max-w-2xl">
-            <div class="md:flex">
-              <div class="p-8">
-                <div class="uppercase tracking-wide text-sm text-indigo-500 font-semibold">First Name</div>
-                <p class="mt-1 text-gray-900 text-2xl font-bold">{account.firstName}</p>
-                <div class="uppercase tracking-wide text-sm text-indigo-500 font-semibold mt-4">Last Name</div>
-                <p class="mt-1 text-gray-900 text-2xl font-bold">{account.lastName}</p>
-                <div class="uppercase tracking-wide text-sm text-indigo-500 font-semibold mt-4">Age</div>
-                <p class="mt-1 text-gray-900 text-2xl font-bold">{account.age}</p>
-                <div class="uppercase tracking-wide text-sm text-indigo-500 font-semibold mt-4">Account Crypto Balance</div>
-                <p class="mt-1 text-gray-900 text-2xl font-bold">{ethers.utils.parseEther(account.balance || 0)}</p>
-              </div>
-            </div>
-          </div> */}
-          <div className="w-full max-w-md mx-auto rounded-lg overflow-hidden shadow-md bg-white">
+        <div className="">
+          <div className="w-full max-w-md mx-7 rounded-lg overflow-hidden shadow-md bg-white">
             <div className="px-6 py-4 bg-indigo-600">
               <div className="text-white font-bold text-xl mb-2">
                 {account.firstName} {account.lastName}
               </div>
               <div className="text-white font-bold text-lg">
-                ${account.balance}
+                {account.balance} ETH
               </div>
             </div>
             <div className="bg-gray-100 px-6 py-4">
@@ -188,51 +228,10 @@ export default function Bank() {
               <div className="text-gray-900 text-2xl">{account.age}</div>
             </div>
           </div>
-          {/* <div className="max-w-md mx-auto bg-white rounded-xl shadow-md overflow-hidden md:max-w-2xl">
-            <div className="md:flex">
-              <div className="p-8">
-                <div className="uppercase tracking-wide text-sm text-indigo-500 font-semibold">
-                  First Name
-                </div>
-                <p
-                  className="w-full mt-1 text-gray-900 text-2xl font-bold border-b-2 border-gray-200 focus:outline-none focus:border-indigo-500"
-                  type="text"
-                  value={account.firstName}
-                // onChange={(event) => setFirstName(event.target.value)}
-                >{account.firstName} </p>
-                <div className="uppercase tracking-wide text-sm text-indigo-500 font-semibold mt-4">
-                  Last Name
-                </div>
-                <p
-                  className="w-full mt-1 text-gray-900 text-2xl font-bold border-b-2 border-gray-200 focus:outline-none focus:border-indigo-500"
-                  type="text"
-                  value={account.lastName}
-                // onChange={(event) => setLastName(event.target.value)}
-                />
-                <div className="uppercase tracking-wide text-sm text-indigo-500 font-semibold mt-4">Age</div>
-                <p
-                  className="w-full mt-1 text-gray-900 text-2xl font-bold border-b-2 border-gray-200 focus:outline-none focus:border-indigo-500"
-                  type="number"
-                  value={account.age}
-                // onChange={(event) => setAge(event.target.value)}
-                />
-                <div className="uppercase tracking-wide text-sm text-indigo-500 font-semibold mt-4">
-                  Account Crypto Balance
-                </div>
-                <p
-                  className="w-full mt-1 text-gray-900 text-2xl font-bold border-b-2 border-gray-200 focus:outline-none focus:border-indigo-500"
-                  type="number"
-                  step="0.000000000000000001"
-                  value={account.balance}
-                // onChange={(event) => setBalance(event.target.value)}
-                />
-              </div>
-            </div>
-          </div> */}
 
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="py-6">
-              <div className="flex flex-col sm:flex-row">
+          <div className="max-w-8xl w-full mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="py-6 ">
+              <div className="w-full flex flex-col sm:flex-row">
                 <div className="sm:w-1/4">
                   <div className="flex flex-col space-y-1">
                     <button
@@ -294,66 +293,100 @@ export default function Bank() {
                   </div>
                 </div>
                 <div className="sm:w-3/4">
-                  {activeTab === "withdraw" && <Withdraw />}
-                  {activeTab === "transfer" && <Transfer />}
-                  {activeTab === "deposit" && <Fund />}
+                  {activeTab === "withdraw" && <Withdraw
+                    handleWithdraw={handleWithdraw}
+                    balance={account.balance}
+                  />}
+                  {activeTab === "transfer" && <Transfer
+                    handleTransfer={handleTransfer}
+                    balance={account.balance}
+                  />}
+                  {activeTab === "deposit" && <Fund
+                    handleFundAccount={handleFundAccount}
+                    balance={account.balance}
+                  />}
                 </div>
               </div>
             </div>
           </div>
-        </>
+        </div>
       ) : (<>
-          {/* button for creating account.  */}
-          <form onSubmit={handleSubmit}>
-            <div className="max-w-md mx-auto bg-white rounded-xl shadow-md overflow-hidden md:max-w-2xl">
-              <div className="md:flex">
-                <div className="p-8">
-                  <div className="uppercase tracking-wide text-sm text-indigo-500 font-semibold">
-                    First Name
-                  </div>
-                  <input
-                    className="w-full mt-1 text-gray-900 text-2xl font-bold border-b-2 border-gray-200 focus:outline-none focus:border-indigo-500"
-                    type="text"
-                    value={account.firstName}
-                    // onChange={(event) => setFirstName(event.target.value)}
-                  />
-                  <div className="uppercase tracking-wide text-sm text-indigo-500 font-semibold mt-4">
-                    Last Name
-                  </div>
-                  <input
-                    className="w-full mt-1 text-gray-900 text-2xl font-bold border-b-2 border-gray-200 focus:outline-none focus:border-indigo-500"
-                    type="text"
-                    value={account.lastName}
-                    // onChange={(event) => setLastName(event.target.value)}
-                  />
-                  <div className="uppercase tracking-wide text-sm text-indigo-500 font-semibold mt-4">Age</div>
-                  <input
-                    className="w-full mt-1 text-gray-900 text-2xl font-bold border-b-2 border-gray-200 focus:outline-none focus:border-indigo-500"
-                    type="number"
-                    value={account.age}
-                    // onChange={(event) => setAge(event.target.value)}
-                  />
-                  <div className="uppercase tracking-wide text-sm text-indigo-500 font-semibold mt-4">
-                    Account Crypto Balance
-                  </div>
-                  <input
-                    className="w-full mt-1 text-gray-900 text-2xl font-bold border-b-2 border-gray-200 focus:outline-none focus:border-indigo-500"
-                    type="number"
-                    step="0.000000000000000001"
-                    value={account.balance}
-                    // onChange={(event) => setBalance(event.target.value)}
-                  />
+        {/* button for creating account.  */}
+        <form onSubmit={handleSubmit(onSubmit)}>
+          <div className="max-w-md mx-auto bg-white rounded-xl shadow-md overflow-hidden md:max-w-2xl">
+            <div className="md:flex">
+              <div className="p-8">
+                <div className="uppercase tracking-wide text-sm text-indigo-500 font-semibold">
+                  First Name
                 </div>
+                <input
+                  className="w-full mt-1 text-gray-900 text-2xl font-bold border-b-2 border-gray-200 focus:outline-none focus:border-indigo-500"
+                  type="text"
+                  name="firstName"
+                  {...register("firstName", { required: true })}
+                />
+                {errors?.firstName && (
+                  <span className="text-red-500">This field is required</span>
+                )}
+
+                <div className="uppercase tracking-wide text-sm text-indigo-500 font-semibold mt-4">
+                  Last Name
+                </div>
+                <input
+                  className="w-full mt-1 text-gray-900 text-2xl font-bold border-b-2 border-gray-200 focus:outline-none focus:border-indigo-500"
+                  name="lastName"
+                  {...register("lastName", { required: true })}
+                />
+                {errors?.lastName && (
+                  <span className="text-red-500">This field is required</span>
+                )}
+
+                <div className="uppercase tracking-wide text-sm text-indigo-500 font-semibold mt-4">
+                  Age
+                </div>
+                <input
+                  className="w-full mt-1 text-gray-900 text-2xl font-bold border-b-2 border-gray-200 focus:outline-none focus:border-indigo-500"
+                  name="age"
+                  type="number"
+                  {...register("age", { required: true, min: 18 })}
+                />
+                {errors?.age?.type === 'required' && (
+                  <span className="text-red-500">This field is required</span>
+                )}
+                {errors?.age?.type === 'min' && (
+                  <span className="text-red-500">
+                    You must be at least 18 years old
+                  </span>
+                )}
+
+                <div className="uppercase tracking-wide text-sm text-indigo-500 font-semibold mt-4">
+                  Account Crypto Balance
+                </div>
+                <input
+                  className="w-full mt-1 text-gray-900 text-2xl font-bold border-b-2 border-gray-200 focus:outline-none focus:border-indigo-500"
+                  name="balance"
+                  type="text"
+                  step="0.000000000000000001"
+                  {...register("balance", { required: true, min: 0 })}
+                />
+                {errors?.balance?.type === 'required' && (
+                  <span className="text-red-500">This field is required</span>
+                )}
+                {errors?.balance?.type === 'min' && (
+                  <span className="text-red-500">Balance must be at least 0</span>
+                )}
               </div>
             </div>
-            <button
-              className="mt-4 px-4 py-2 bg-indigo-500 text-white font-semibold rounded-md shadow-md hover:bg-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:ring-offset-2"
-              type="submit"
-            >
-              Create Account
-            </button>
-          </form>
-        </>
+          </div>
+
+          <button
+            className="mt-4 px-4 py-2 bg-indigo-500 text-white font-semibold rounded-md shadow-md hover:bg-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:ring-offset-2"
+            type="submit"
+          >
+            Create Account
+          </button>
+        </form>
+      </>
       )}
 
     </div>
